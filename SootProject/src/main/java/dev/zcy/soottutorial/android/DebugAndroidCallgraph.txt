@@ -1,0 +1,304 @@
+package dev.zcy.soottutorial.android;
+
+import dev.zcy.soottutorial.visual.AndroidCallGraphFilter;
+import dev.zcy.soottutorial.visual.Visualizer;
+import soot.Scene;
+import soot.SootClass;
+import soot.SootMethod;
+import soot.jimple.infoflow.InfoflowConfiguration;
+import soot.jimple.infoflow.android.InfoflowAndroidConfiguration;
+import soot.jimple.infoflow.android.SetupApplication;
+import soot.jimple.toolkits.callgraph.CallGraph;
+import soot.jimple.toolkits.callgraph.Edge;
+
+import soot.*;
+import soot.options.Options;
+import soot.Body;
+import soot.Local;
+import soot.Scene;
+import soot.Unit;
+import soot.Value;
+import soot.jimple.DefinitionStmt;
+import soot.toolkits.scalar.LocalDefs;
+import soot.jimple.JimpleBody;
+
+import java.io.File;
+import java.util.*;
+
+public class AndroidCallgraph {
+    private final static String USER_HOME = System.getProperty("user.home");
+    private static String androidJar = USER_HOME + "/Library/Android/sdk/platforms";
+    static String androidDemoPath = System.getProperty("user.dir") + File.separator + "demo" + File.separator + "Android";
+    //static String apkPath = androidDemoPath + File.separator + "/app-debug.apk";
+    static String apkPath = "/home/zc/MyProject/apk/app-debug3.apk";
+
+    public static void main(String[] args){
+        if(System.getenv().containsKey("ANDROID_HOME"))
+            androidJar = System.getenv("ANDROID_HOME")+ File.separator+"platforms";
+
+        // Parse arguments
+        InfoflowConfiguration.CallgraphAlgorithm cgAlgorithm = InfoflowConfiguration.CallgraphAlgorithm.SPARK;
+        if (args.length > 0 && args[0].equals("CHA"))
+            cgAlgorithm = InfoflowConfiguration.CallgraphAlgorithm.CHA;
+        boolean drawGraph = false;
+        if (args.length > 1 && args[1].equals("draw"))
+            drawGraph = true;
+
+        //MY  seems to be useless
+        //Options.v().set_allow_phantom_refs(true);
+        //Options.v().set_whole_program(true);
+        //Options.v().set_verbose(true);
+        
+        // Setup FlowDroid
+        final InfoflowAndroidConfiguration config = AndroidUtil.getFlowDroidConfig(apkPath, androidJar, cgAlgorithm);
+        SetupApplication app = new SetupApplication(config);
+        // Create the Callgraph without executing taint analysis
+        app.constructCallgraph();
+        CallGraph callGraph = Scene.v().getCallGraph();
+        
+        
+        /*
+        String className = "java.net.HttpURLConnection";
+        Scene.v().loadClassAndSupport(className);
+        SootClass clazz = Scene.v().getSootClass(className);
+        SootMethod amethod = clazz.getMethod("void setRequestMethod(java.lang.String)");
+        System.out.println("$$$$$$$$$$$$$$" + amethod);
+        */
+        
+        /*
+        // Retrieve printFizzBuzz's body
+        SootClass mainClass = Scene.v().getSootClass("com.connect.UpdateApp");
+        ArrayType stringArrayType = ArrayType.v(RefType.v("java.lang.String"), 1);
+        SootMethod sm = mainClass.getMethod("doInBackground", Arrays.asList(stringArrayType));
+        JimpleBody body = (JimpleBody) sm.retrieveActiveBody();
+
+        // Print some information about printFizzBuzz
+        System.out.println("Method Signature: " + sm.getSignature());
+        System.out.println("--------------");
+        System.out.println("Argument(s):");
+        for (Local l : body.getParameterLocals()) {
+            System.out.println(l.getName() + " : " + l.getType());
+        }
+        System.out.println("--------------");
+        System.out.println("This: " + body.getThisLocal());
+        System.out.println("--------------");
+        System.out.println("Units:");
+        int c = 1;
+        for (Unit u : body.getUnits()) {
+            System.out.println("(" + c + ") " + u.toString());
+            c++;
+        }
+        System.out.println("--------------");
+        
+
+
+
+
+        
+        /*
+        Options.v().set_allow_phantom_refs(true);
+        Options.v().set_process_dir(Collections.singletonList(apkPath));
+        Options.v().set_android_jars(androidJar);
+        Options.v().set_src_prec(Options.src_prec_apk);
+        Options.v().set_whole_program(true);
+        Options.v().set_verbose(true);
+        //Options.v().set_output_format(Options.output_format_none);
+        Options.v().setPhaseOption("cg.spark", "on");
+        PackManager.v().runPacks();
+        CallGraph callGraph = Scene.v().getCallGraph();
+        */
+
+        System.out.println("DEBUG 0 -------------------------------------------------------------------------------\n");
+
+        /*
+        //打印所有ApplicationClass方法  actually useless?
+        Iterator<SootClass> classes = Scene.v().getApplicationClasses().iterator();
+        while (classes.hasNext()) {
+            SootClass cls = classes.next();
+            System.out.println("Class: " + cls.getName());
+            Iterator<SootMethod> methods = cls.getMethods().iterator();
+            while (methods.hasNext()) {
+                SootMethod method = methods.next();
+                //System.out.println("\tMethod: " + method.getName());
+            }
+        }
+        */
+
+        //就算打印出所有edge，也找不到
+        /*
+        Iterator<Edge> edgesdebug = callGraph.iterator();
+        while (edgesdebug.hasNext()) {
+            System.out.println("???????????????????????????????????????" + edgesdebug.next());
+        }
+        */
+
+
+        
+        System.out.println("\nDEBUG 1 ---------------------------------------------------------------------------\n");
+
+        
+
+
+        // Print some general information of the generated callgraph. Note that although usually the nodes in callgraph
+        // are assumed to be methods, the edges in Soot's callgraph is from Unit to SootMethod.
+        
+
+        //找到onCreate方法所属的包
+        String packageName = getMainPackage(callGraph);
+        System.out.println(packageName + "##################################################");
+        if(packageName.equals("Error")){
+            packageName = AndroidUtil.getPackageName(apkPath);
+        }
+        packageName = AndroidUtil.getPackageName(apkPath);
+        AndroidCallGraphFilter androidCallGraphFilter = new AndroidCallGraphFilter(packageName);
+
+        int classIndex = 0;
+        for(SootClass sootClass: androidCallGraphFilter.getValidClasses()){
+            System.out.println(String.format("Class %d: %s", ++classIndex, sootClass.getName()));
+            for(SootMethod sootMethod : sootClass.getMethods()){
+                //打印所有方法进入和离开的边数，不精确
+                printInAndOutEdges(sootMethod, callGraph);
+            }
+        }
+
+        System.out.println("\nDEBUG 2 -----------------------------------------------------------------------------\n");
+
+
+
+
+
+        // My Output
+        classIndex = 0;
+        for(SootClass sootClass: androidCallGraphFilter.getValidClasses()){ 
+            System.out.println(String.format("Class %d: %s", ++classIndex, sootClass.getName()));
+            for(SootMethod sootMethod : sootClass.getMethods()){
+                //这里只有用户类的用户方法
+
+                // Identify if it is a Life Cycle Function
+                if(androidCallGraphFilter.isLifecycleMethods(sootMethod)){
+                    System.out.println(String.format("\t[Life Cycle Function] Class %s, Method %s", sootMethod.getDeclaringClass().getName(), sootMethod.getName()));
+                    // Get all the reachable Functions
+                    Map<SootMethod, SootMethod> reachableMethodMap = getAllReachableMethods(sootMethod); //这个应该会找到所有的包含库函数
+
+                    //Travel all the reachable Functions, output vaild methods and the path
+                    for (Map.Entry<SootMethod, SootMethod> entry : reachableMethodMap.entrySet()) {
+                        SootMethod mapKey = entry.getKey();
+                        SootMethod mapValue = entry.getValue();
+                        if((mapValue != null) && (androidCallGraphFilter.isValidMethod(mapKey))){
+                            System.out.println("\t\t[Reachable] " + mapKey.getName() + " | " + getPossiblePath(reachableMethodMap, mapKey));
+                            //isValidMethod会筛掉java开头的类，不行，所以找网络调用不能是&这个
+                            //System.out.println(mapKey.getDeclaringClass().getName());
+                        }
+                        if((mapValue != null) && (androidCallGraphFilter.isNetworkCallLoose(mapKey))){
+                            System.out.println("\t\t\t[Network] " + mapKey.getDeclaringClass().getName() + " " + mapKey.getName() + " | " + getPossiblePath(reachableMethodMap, mapKey));
+                        }
+                    }       
+                    
+                    //DEBUG
+                    for (Map.Entry<SootMethod, SootMethod> entry : reachableMethodMap.entrySet()) {
+                        SootMethod mapKey = entry.getKey();
+                        SootMethod mapValue = entry.getValue();                        
+                        System.out.println("\t\t\t\t[ALL] " + mapKey.getDeclaringClass().getName() + " " + mapKey.getName() + " | " + getPossiblePath(reachableMethodMap, mapKey));
+                    }                
+               }
+            }
+        }
+
+
+
+        // Draw a subset of call graph
+        if (drawGraph) {
+            Visualizer.v().addCallGraph(callGraph,
+                    androidCallGraphFilter,
+                    new Visualizer.AndroidNodeAttributeConfig(true));
+            Visualizer.v().draw();
+        }
+    }
+
+    public static void printInAndOutEdges(SootMethod sootMethod, CallGraph callGraph){
+        //统计流入与流出的边数量, One Step Only!!!!!!!!!!
+        int incomingEdge = 0;
+        for(Iterator<Edge> it = callGraph.edgesInto(sootMethod); it.hasNext();incomingEdge++,it.next());
+        int outgoingEdge = 0;
+        for(Iterator<Edge> it = callGraph.edgesOutOf(sootMethod); it.hasNext();outgoingEdge++,it.next()){
+            /*
+            Edge edge = it.next();
+            SootMethod src = edge.src();
+            SootMethod tgt = edge.tgt();
+            System.out.println("\t\t" + outgoingEdge + " " + src.getName() + " -> " + tgt.getName());
+            */
+        }
+        //System.out.println(String.format("\tClass %s, Method %s, #IncomeEdges: %d, #OutgoingEdges: %d", sootMethod.getDeclaringClass().getName(), sootMethod.getName(), incomingEdge, outgoingEdge));
+        System.out.println(String.format("\tMethod %s, #IncomeEdges: %d, #OutgoingEdges: %d", sootMethod.getName(), incomingEdge, outgoingEdge));
+        
+        /*
+        // DEBUG
+        for(Iterator<Edge> it = callGraph.edgesOutOf(sootMethod); it.hasNext();it.next()){
+            Edge edge = it.next();
+
+            SootMethod src = edge.src();
+            SootMethod tgt = edge.tgt();
+            System.out.println("\t\t" + src.getName() + " -> " + tgt.getName());
+            if(tgt.getName().equals("aNetWorkCallFun")){
+                System.out.println("true!!!");
+                for(Iterator<Edge> ittgt = callGraph.edgesOutOf(tgt); ittgt.hasNext();ittgt.next()){
+                    SootMethod a = ittgt.next().tgt();
+                    System.out.println("\t\t\t\t" + a.getName());
+                }
+            }
+            
+        }
+        */
+    }
+
+    // A Breadth-First Search algorithm to get all reachable methods from initialMethod in the callgraph
+    // The output is a map from reachable methods to their parents
+    public static Map<SootMethod, SootMethod> getAllReachableMethods(SootMethod initialMethod){
+        CallGraph callgraph = Scene.v().getCallGraph();
+        List<SootMethod> queue = new ArrayList<>();
+        queue.add(initialMethod);
+        Map<SootMethod, SootMethod> parentMap = new HashMap<>();
+        parentMap.put(initialMethod, null);
+        for(int i=0; i< queue.size(); i++){
+            SootMethod method = queue.get(i);
+            for (Iterator<Edge> it = callgraph.edgesOutOf(method); it.hasNext(); ) {
+                Edge edge = it.next();
+                SootMethod childMethod = edge.tgt();
+                if(parentMap.containsKey(childMethod))
+                    continue;
+                parentMap.put(childMethod, method);
+                queue.add(childMethod);
+            }
+        }
+        return parentMap;
+    }
+
+    public static String getPossiblePath(Map<SootMethod, SootMethod> reachableParentMap, SootMethod it) {
+        String possiblePath = null;
+        while(it != null){
+            String itName = it.getDeclaringClass().getShortName()+"."+it.getName();
+            if(possiblePath == null)
+                possiblePath = itName;
+            else
+                possiblePath = itName + " -> " + possiblePath;
+            it = reachableParentMap.get(it);
+        } return possiblePath;
+    }
+
+    public static String getMainPackage(CallGraph callGraph){
+        Iterator<SootClass> classes = Scene.v().getApplicationClasses().iterator();
+        while (classes.hasNext()) {
+            SootClass cls = classes.next();
+            Iterator<SootMethod> methods = cls.getMethods().iterator();
+            while (methods.hasNext()) {
+                SootMethod method = methods.next();
+                if(method.getName().equals("onCreate")){
+                    String packageName = method.getDeclaringClass().getPackageName();
+                    return packageName;
+                }
+            }
+        }
+        //Can not find onCreate
+        return "Error";
+    }
+}
